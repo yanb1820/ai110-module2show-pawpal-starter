@@ -4,8 +4,26 @@
 
 **a. Initial design**
 
-- Briefly describe your initial UML design.
-- What classes did you include, and what responsibilities did you assign to each?
+The system centers on four classes connected in a clear hierarchy:
+
+| Class | Responsibility |
+|---|---|
+| `Owner` | Holds owner name, daily available minutes, and care preferences. Owns a list of `Pet` objects. |
+| `Pet` | Holds pet name, species, age, and special needs. Owns a list of `Task` objects. |
+| `Task` | Dataclass representing a single care action (title, duration, priority, type, preferred time). Pure data — no scheduling logic. |
+| `Scheduler` | Aggregates an `Owner` (and transitively all pets + tasks) and produces a `list[ScheduledItem]` via a greedy, priority-first algorithm. Also provides a plain-English `explain_plan()` output. |
+
+A `ScheduledItem` dataclass acts as the output unit — it pairs a `Task` with the `Pet` it belongs to and a computed start time.
+
+Relationships:
+- `Owner` 1 → * `Pet`
+- `Pet` 1 → * `Task`
+- `Scheduler` aggregates `Owner` → reads all pets/tasks → emits `[ScheduledItem]`
+
+Three core user actions the system supports:
+1. Add a pet (with profile info) to an owner.
+2. Add/edit care tasks for a pet (duration, priority, type).
+3. Generate and view a daily schedule with reasoning for each scheduled task.
 
 **b. Design changes**
 
