@@ -45,14 +45,20 @@ class Task:
     task_type: TaskType = TaskType.OTHER
     preferred_time: Optional[str] = None   # e.g. "morning", "evening"
     notes: str = ""
+    completed: bool = False
 
     def is_urgent(self) -> bool:
         """Return True when this task must appear in any daily plan."""
         return self.priority == Priority.HIGH
 
+    def mark_complete(self) -> None:
+        """Mark this task as completed."""
+        self.completed = True
+
     def __repr__(self) -> str:
+        status = "✓" if self.completed else "○"
         return (
-            f"Task({self.title!r}, {self.duration_minutes}min, "
+            f"Task({status} {self.title!r}, {self.duration_minutes}min, "
             f"{self.priority.value}, type={self.task_type.value})"
         )
 
@@ -86,6 +92,7 @@ class Pet:
         self._tasks = [t for t in self._tasks if t.title.lower() != title.lower()]
 
     def get_tasks(self) -> list[Task]:
+        """Return all tasks assigned to this pet."""
         return self._tasks
 
     def __repr__(self) -> str:
@@ -115,7 +122,12 @@ class Owner:
         self._pets.append(pet)
 
     def get_pets(self) -> list[Pet]:
+        """Return all pets registered to this owner."""
         return self._pets
+
+    def get_all_tasks(self) -> list[tuple[Pet, Task]]:
+        """Return every (pet, task) pair across all pets — used by Scheduler."""
+        return [(pet, task) for pet in self._pets for task in pet.get_tasks()]
 
     def __repr__(self) -> str:
         return f"Owner({self.name!r}, available={self.available_minutes}min, pets={len(self._pets)})"
@@ -183,11 +195,9 @@ class Scheduler:
         """Generate and return the daily schedule."""
         self._schedule = []
 
-        candidates: list[tuple[Pet, Task]] = [
-            (pet, task)
-            for pet in self.owner.get_pets()
-            for task in pet.get_tasks()
-        ]
+        # Owner.get_all_tasks() is the single access point: Scheduler never
+        # reaches into Pet directly — it always goes through Owner.
+        candidates: list[tuple[Pet, Task]] = self.owner.get_all_tasks()
 
         priority_order = {Priority.HIGH: 0, Priority.MEDIUM: 1, Priority.LOW: 2}
         candidates.sort(key=lambda pt: (priority_order[pt[1].priority], pt[1].duration_minutes))
