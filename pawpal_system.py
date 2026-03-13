@@ -9,6 +9,7 @@ UML relationships:
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
@@ -46,6 +47,7 @@ class Task:
     preferred_time: Optional[str] = None   # e.g. "morning", "evening"
     notes: str = ""
     completed: bool = False
+    frequency: str = "once"    # "once" | "daily" | "weekly"
 
     def is_urgent(self) -> bool:
         """Return True when this task must appear in any daily plan."""
@@ -54,6 +56,12 @@ class Task:
     def mark_complete(self) -> None:
         """Mark this task as completed."""
         self.completed = True
+
+    def next_occurrence(self) -> Optional[Task]:
+        """Return a fresh copy of this task for the next cycle, or None if non-recurring."""
+        if self.frequency == "once":
+            return None
+        return dataclasses.replace(self, completed=False)
 
     def __repr__(self) -> str:
         status = "✓" if self.completed else "○"
@@ -128,6 +136,19 @@ class Owner:
     def get_all_tasks(self) -> list[tuple[Pet, Task]]:
         """Return every (pet, task) pair across all pets — used by Scheduler."""
         return [(pet, task) for pet in self._pets for task in pet.get_tasks()]
+
+    def filter_tasks(
+        self,
+        pet_name: Optional[str] = None,
+        completed: Optional[bool] = None,
+    ) -> list[tuple[Pet, Task]]:
+        """Return tasks filtered by pet name and/or completion status."""
+        results = self.get_all_tasks()
+        if pet_name is not None:
+            results = [(p, t) for p, t in results if p.name.lower() == pet_name.lower()]
+        if completed is not None:
+            results = [(p, t) for p, t in results if t.completed == completed]
+        return results
 
     def __repr__(self) -> str:
         return f"Owner({self.name!r}, available={self.available_minutes}min, pets={len(self._pets)})"
@@ -235,6 +256,30 @@ class Scheduler:
         total = sum(i.task.duration_minutes for i in self._schedule)
         lines.append(f"\nTotal scheduled: {total} min / {self.owner.available_minutes} min available")
         return "\n".join(lines)
+
+    def sorted_schedule(self) -> list[ScheduledItem]:
+        """Return scheduled items ordered by start time."""
+        return sorted(self._schedule, key=lambda item: item.start_minute)
+
+    def detect_conflicts(self) -> list[str]:
+        """Return a warning string for every pair of overlapping scheduled items.
+
+        Two items conflict when one starts before the other finishes:
+            a.start < b.end  AND  b.start < a.end
+        Returns an empty list when no conflicts exist.
+        """
+        warnings = []
+        items = self.sorted_schedule()
+        for i in range(len(items)):
+            for j in range(i + 1, len(items)):
+                a, b = items[i], items[j]
+                if a.start_minute < b.end_minute and b.start_minute < a.end_minute:
+                    warnings.append(
+                        f"CONFLICT: '{a.task.title}' ({a.pet.name}, {a.time_label()}–"
+                        f"{ScheduledItem(a.task, a.pet, a.end_minute).time_label()}) "
+                        f"overlaps '{b.task.title}' ({b.pet.name}, {b.time_label()})"
+                    )
+        return warnings
 
     # -- private helpers -------------------------------------------------
 
